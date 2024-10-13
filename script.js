@@ -1,91 +1,69 @@
-document.addEventListener('DOMContentLoaded', () => {
-  // تعريف المتغيرات
-  const form = document.getElementById('generate-form');
-  const promptInput = document.getElementById('prompt-input');
-  const progressBar = document.getElementById('progress-bar');
-  const progressText = document.getElementById('progress-text');
-  const imageContainer = document.getElementById('image-container');
-  const generatedImage = document.getElementById('generated-image');
-  const downloadLink = document.getElementById('download-link');
+// تعريف مفتاح API (استبدله بمفتاح API الخاص بك من Hugging Face)
+const API_TOKEN = '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';
 
-  // مفتاح API الخاص بك
-  const apiToken = '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'; // استبدل هذا بمفتاحك الحقيقي
+// تعريف العناصر من DOM
+const imageGenerateButton = document.getElementById('generate-button');
+const imagePromptInput = document.getElementById('prompt-input');
+const imageModelSelector = document.getElementById('image-model-selector');
+const imageOutput = document.getElementById('image-output');
+const generatedImage = document.getElementById('generated-image');
+const downloadLink = document.getElementById('download-link');
 
-  // إضافة مستمع الحدث للنموذج
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
+// حدث عند النقر على زر توليد الصورة
+imageGenerateButton.addEventListener('click', () => {
+  const prompt = imagePromptInput.value.trim();
+  const modelId = imageModelSelector.value;
 
-    const prompt = promptInput.value.trim();
-    if (!prompt) {
-      showNotification('الرجاء إدخال وصف للصورة.', 'error');
-      return;
-    }
+  if (!prompt) {
+    alert('الرجاء إدخال وصف للصورة.');
+    return;
+  }
 
-    startImageGeneration(prompt);
-  });
+  generateImage(prompt, modelId);
+});
 
-  // وظيفة بدء توليد الصورة
-  function startImageGeneration(prompt) {
-  progressBar.style.width = '0%';
-  progressText.textContent = 'جارٍ توليد الصورة...';
-  document.getElementById('generation-progress').style.display = 'block';
-  imageContainer.style.display = 'none';
+function generateImage(prompt, modelId) {
+  // إخفاء العنصر الذي يحتوي على الصورة والإعدادات
+  imageOutput.style.display = 'none';
+  imageGenerateButton.disabled = true;
+  imageGenerateButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإنشاء...';
 
-  // عرض إشعار للمستخدم بأن المعالجة بدأت
-  showNotification('جاري توليد الصورة، يرجى الانتظار...', 'info');
-    // إرسال طلب إلى API
-    fetch('https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ inputs: prompt })
+  // إرسال الطلب إلى واجهة برمجة تطبيقات Hugging Face
+  fetch(`https://api-inference.huggingface.co/models/${modelId}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${API_TOKEN}`, // تأكد من تعريف API_TOKEN بمفتاح API الخاص بك
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      inputs: prompt,
+      options: { wait_for_model: true } // الانتظار حتى يكون النموذج جاهزًا
     })
+  })
     .then(response => {
       if (!response.ok) {
-        throw new Error('HTTP error! status: ' + response.status);
+        // إذا كانت الاستجابة غير ناجحة، استخراج رسالة الخطأ
+        return response.json().then(errorData => {
+          throw new Error(`خطأ في الاستجابة من الخادم: ${response.status} - ${errorData.error}`);
+        });
       }
+      // إذا كانت الاستجابة ناجحة، تحويلها إلى Blob
       return response.blob();
     })
     .then(blob => {
-      progressBar.style.width = '100%';
-      progressText.textContent = 'اكتمل توليد الصورة 100%';
-
+      // إنشاء رابط URL للصورة المستلمة وعرضها
       const imageUrl = URL.createObjectURL(blob);
       generatedImage.src = imageUrl;
-      downloadLink.href = imageUrl; // Set the href for download
-      imageContainer.style.display = 'block';
-
-      showNotification('تم إنشاء الصورة بنجاح!');
+      downloadLink.href = imageUrl;
+      imageOutput.style.display = 'block';
     })
     .catch(error => {
-      console.error('Error generating image:', error);
-      showNotification('حدث خطأ أثناء توليد الصورة. الرجاء المحاولة مرة أخرى.', 'error');
-      progressBar.style.width = '0%';
-      progressText.textContent = 'حدث خطأ.';
+      console.error('خطأ أثناء توليد الصورة:', error);
+      alert(`حدث خطأ أثناء توليد الصورة: ${error.message}`);
+    })
+    .finally(() => {
+      // إعادة تفعيل زر الإنشاء بعد الانتهاء
+      imageGenerateButton.disabled = false;
+      imageGenerateButton.innerHTML = '<i class="fas fa-magic"></i> إنشاء الصورة';
     });
-
-    // تحديث شريط التقدم بشكل دوري
-    let progress = 0;
-const interval = setInterval(() => {
-  if (progress < 100) {
-    progress += 10; // زيادة التقدم
-    progressBar.style.width = `${progress}%`;
-  } else {
-    clearInterval(interval);
-  }
-}, 1000); // تحديث كل ثانية
-  }
-  // وظيفة عرض الإشعارات
-  function showNotification(message, type = 'success') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-
-    document.body.appendChild(notification);
-    setTimeout(() => {
-      notification.remove();
-    }, 3000);
-  }
-});
+}
